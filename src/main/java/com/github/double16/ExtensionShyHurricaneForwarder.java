@@ -119,14 +119,12 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
             markdown.append("# ").append(title).append("\n\n");
             markdown.append(String.format("""
                     **Summary**
-                    %s
                     Severity: %s
                     Confidence: %s
-                    """, auditIssue.definition().background(), auditIssue.severity().name(), auditIssue.confidence().name()));
-            if (StringUtils.isNotBlank(auditIssue.detail())) {
-                markdown.append(auditIssue.detail()).append("\n");
-            }
-            markdown.append("\n**Discovery Method**\n");
+                    URL: `%s`
+
+                    %s
+                    """, auditIssue.severity().name(), auditIssue.confidence().name(), auditIssue.baseUrl(), auditIssue.definition().background()));
             if (StringUtils.isNotBlank(auditIssue.detail())) {
                 markdown.append(auditIssue.detail()).append("\n");
             }
@@ -151,8 +149,12 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
                 }
                 markdown.append("\n\n\n");
             }
+            markdown.append("\n**Solution**\n");
             if (StringUtils.isNotBlank(auditIssue.remediation())) {
-                markdown.append(String.format("\n**Solution**\n%s\n", auditIssue.remediation()));
+                markdown.append("\n").append(auditIssue.remediation()).append("\n");
+            }
+            if (StringUtils.isNotBlank(auditIssue.definition().remediation())) {
+                markdown.append("\n").append(auditIssue.definition().remediation()).append("\n");
             }
             postFinding(auditIssue.baseUrl(), title, markdown.toString());
 
