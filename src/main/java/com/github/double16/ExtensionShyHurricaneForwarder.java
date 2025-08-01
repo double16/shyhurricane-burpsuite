@@ -136,7 +136,7 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
                 String requestBody = StringUtils.truncate(rr.request().bodyToString(), 1024);
                 if (StringUtils.isNotBlank(requestBody)) {
                     markdown.append("\n");
-                    markdown.append(rr.request().bodyToString());
+                    markdown.append(requestBody);
                 }
                 markdown.append("\n\n");
                 markdown.append(rr.response().statusCode());
@@ -145,7 +145,7 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
                 String responseBody = StringUtils.truncate(rr.response().bodyToString(), 1024);
                 if (StringUtils.isNotBlank(responseBody)) {
                     markdown.append("\n");
-                    markdown.append(rr.response().bodyToString());
+                    markdown.append(responseBody);
                 }
                 markdown.append("\n\n\n");
             }
