@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import burp.api.montoya.BurpExtension;
@@ -24,6 +25,7 @@ import burp.api.montoya.http.handler.ResponseReceivedAction;
 import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
+import burp.api.montoya.persistence.Preferences;
 import burp.api.montoya.scanner.audit.AuditIssueHandler;
 import burp.api.montoya.scanner.audit.issues.AuditIssue;
 import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence;
@@ -34,7 +36,7 @@ import org.apache.commons.lang3.StringUtils;
 @SuppressWarnings("unused")
 public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionUnloadingHandler, HttpHandler, AuditIssueHandler {
 
-    private static final String NAME = "ShyHurricane Forwarder";
+    private static final String NAME = "ShyHurricane";
     private static final String INDEX_PATH = "/index";
     private static final String FINDINGS_PATH = "/findings";
 
@@ -64,23 +66,34 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
             "application/vnd.ms-fontobject"
     );
 
+    /* Preference keys */
+    private static final String PREF_ONLY_IN_SCOPE = "onlyInScope";
+    private static final String PREF_MCP_SERVER_URL = "mcpServerUrl";
+    private static final String PREF_MIN_CONF = "minConfidence";
+    private static final String PREF_MIN_SEV = "minSeverity";
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final List<Registration> registrations = new ArrayList<>();
 
-    // TODO: config items:
-    private final boolean onlyInScope = true;
-    private final String mcpServerUrl = "http://localhost:8000";
-    private final AuditIssueConfidence minimumConfidenceLevel = AuditIssueConfidence.FIRM;
-    private final AuditIssueSeverity minimumSeverityLevel = AuditIssueSeverity.INFORMATION;
+    private volatile boolean onlyInScope = true;
+    private volatile String mcpServerUrl = "http://localhost:8000";
+    private volatile AuditIssueConfidence minimumConfidenceLevel = AuditIssueConfidence.FIRM;
+    private volatile AuditIssueSeverity minimumSeverityLevel = AuditIssueSeverity.INFORMATION;
 
+    private Preferences prefs;
 
     @Override
     public void initialize(MontoyaApi api) {
         api.extension().setName(NAME);
         api.extension().registerUnloadingHandler(this);
+
+        this.prefs = api.persistence().preferences();
+        loadPrefs();
+
         registrations.add(api.http().registerHttpHandler(this));
         registrations.add(api.scanner().registerAuditIssueHandler(this));
+        api.userInterface().registerSuiteTab(NAME, new ShyHurricaneConfigTab(this, api));
     }
 
     @Override
@@ -89,6 +102,58 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
             registration.deregister();
         }
         registrations.clear();
+    }
+
+    private void loadPrefs() {
+        onlyInScope = Optional.ofNullable(prefs.getBoolean(PREF_ONLY_IN_SCOPE)).orElse(onlyInScope);
+        mcpServerUrl = Optional.ofNullable(prefs.getString(PREF_MCP_SERVER_URL)).orElse(mcpServerUrl);
+        minimumConfidenceLevel = AuditIssueConfidence.valueOf(Optional.ofNullable(
+                prefs.getString(PREF_MIN_CONF)).orElse(minimumConfidenceLevel.name()));
+        minimumSeverityLevel = AuditIssueSeverity.valueOf(Optional.ofNullable(
+                prefs.getString(PREF_MIN_SEV)).orElse(minimumSeverityLevel.name()));
+    }
+
+    private void savePrefs() {
+        prefs.setBoolean(PREF_ONLY_IN_SCOPE, onlyInScope);
+        prefs.setString(PREF_MCP_SERVER_URL, mcpServerUrl);
+        prefs.setString(PREF_MIN_CONF, minimumConfidenceLevel.name());
+        prefs.setString(PREF_MIN_SEV, minimumSeverityLevel.name());
+    }
+
+    boolean isOnlyInScope() {
+        return onlyInScope;
+    }
+
+    String getMcpServerUrl() {
+        return mcpServerUrl;
+    }
+
+    AuditIssueConfidence getMinimumConfidenceLevel() {
+        return minimumConfidenceLevel;
+    }
+
+    AuditIssueSeverity getMinimumSeverityLevel() {
+        return minimumSeverityLevel;
+    }
+
+    void setOnlyInScope(boolean v) {
+        onlyInScope = v;
+        savePrefs();
+    }
+
+    void setMcpServerUrl(String v) {
+        mcpServerUrl = v;
+        savePrefs();
+    }
+
+    void setMinimumConfidenceLevel(AuditIssueConfidence v) {
+        minimumConfidenceLevel = v;
+        savePrefs();
+    }
+
+    void setMinimumSeverityLevel(AuditIssueSeverity v) {
+        minimumSeverityLevel = v;
+        savePrefs();
     }
 
     @Override
