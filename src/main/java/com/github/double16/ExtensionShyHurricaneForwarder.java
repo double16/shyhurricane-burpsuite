@@ -271,7 +271,7 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
     private Map<String, String> toKatanaHeaders(List<HttpHeader> headers) {
         Map<String, String> map = new HashMap<>();
         for (HttpHeader header : headers) {
-            String katanaHeaderName = header.name().toLowerCase().replace('-', '_');
+            String katanaHeaderName = header.name().toLowerCase();
             if (map.containsKey(katanaHeaderName)) {
                 map.put(katanaHeaderName, map.get(katanaHeaderName) + ";" + header.value());
             } else {
