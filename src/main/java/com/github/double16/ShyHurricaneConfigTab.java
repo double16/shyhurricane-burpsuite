@@ -1,4 +1,3 @@
-// ShyHurricaneConfigTab.java
 package com.github.double16;
 
 import burp.api.montoya.MontoyaApi;
@@ -13,7 +12,6 @@ class ShyHurricaneConfigTab extends JPanel {
 
     private final ExtensionShyHurricaneForwarder ext;
 
-    // UI controls ------------------------------------------------------------
     private final JCheckBox onlyInScopeCheck;
     private final JTextField urlField;
     private final JComboBox<AuditIssueConfidence> confidenceBox;
@@ -37,7 +35,7 @@ class ShyHurricaneConfigTab extends JPanel {
         JButton saveBtn = new JButton("Save");
         saveBtn.addActionListener(e -> applyConfig());
 
-        // layout -------------------------------------------------------------
+        // layout
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(4, 6, 4, 6);
         c.anchor = GridBagConstraints.WEST;

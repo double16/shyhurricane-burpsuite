@@ -1,8 +1,8 @@
 plugins {
     id("java")
-    id("com.gradleup.shadow") version "8.3.5"
-    id("com.diffplug.spotless") version "7.2.1"
-    id("com.github.ben-manes.versions") version "0.52.0"
+    id("com.gradleup.shadow") version "9.4.2"
+    id("com.diffplug.spotless") version "8.6.0"
+    id("com.github.ben-manes.versions") version "0.54.0"
 }
 
 java {
@@ -15,10 +15,10 @@ repositories {
 }
 
 dependencies {
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.19.+")
-    implementation("org.apache.commons:commons-lang3:3.18.+")
-    compileOnly("net.portswigger.burp.extensions:montoya-api:2025.7")
-    testImplementation(platform("org.junit:junit-bom:5.10.0"))
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.22.+")
+    implementation("org.apache.commons:commons-lang3:3.20.+")
+    implementation("net.portswigger.burp.extensions:montoya-api:2026.4")
+    testImplementation(platform("org.junit:junit-bom:5.11.+"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }
 

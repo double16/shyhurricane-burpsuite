@@ -105,6 +105,10 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
     }
 
     private void loadPrefs() {
+        if (prefs == null) {
+            // Not initialized via Montoya API yet; keep defaults
+            return;
+        }
         onlyInScope = Optional.ofNullable(prefs.getBoolean(PREF_ONLY_IN_SCOPE)).orElse(onlyInScope);
         mcpServerUrl = Optional.ofNullable(prefs.getString(PREF_MCP_SERVER_URL)).orElse(mcpServerUrl);
         minimumConfidenceLevel = AuditIssueConfidence.valueOf(Optional.ofNullable(
@@ -114,6 +118,10 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
     }
 
     private void savePrefs() {
+        if (prefs == null) {
+            // Not initialized via Montoya API yet; skip persisting during tests or early construction
+            return;
+        }
         prefs.setBoolean(PREF_ONLY_IN_SCOPE, onlyInScope);
         prefs.setString(PREF_MCP_SERVER_URL, mcpServerUrl);
         prefs.setString(PREF_MIN_CONF, minimumConfidenceLevel.name());
