@@ -17,6 +17,7 @@ import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.core.Registration;
 import burp.api.montoya.extension.ExtensionUnloadingHandler;
+import burp.api.montoya.core.ToolType;
 import burp.api.montoya.http.handler.HttpHandler;
 import burp.api.montoya.http.handler.HttpRequestToBeSent;
 import burp.api.montoya.http.handler.HttpResponseReceived;
@@ -71,6 +72,8 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
     private static final String PREF_MCP_SERVER_URL = "mcpServerUrl";
     private static final String PREF_MIN_CONF = "minConfidence";
     private static final String PREF_MIN_SEV = "minSeverity";
+    private static final String PREF_ALL_TOOLS = "allTools";
+    private static final String PREF_SELECTED_TOOLS = "selectedToolsCsv";
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -80,6 +83,8 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
     private volatile String mcpServerUrl = "http://localhost:8000";
     private volatile AuditIssueConfidence minimumConfidenceLevel = AuditIssueConfidence.FIRM;
     private volatile AuditIssueSeverity minimumSeverityLevel = AuditIssueSeverity.INFORMATION;
+    private volatile boolean allTools = true; // default to all tools
+    private volatile Set<String> selectedToolNames = Set.of(); // store ToolType names
 
     private Preferences prefs;
 
@@ -115,6 +120,16 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
                 prefs.getString(PREF_MIN_CONF)).orElse(minimumConfidenceLevel.name()));
         minimumSeverityLevel = AuditIssueSeverity.valueOf(Optional.ofNullable(
                 prefs.getString(PREF_MIN_SEV)).orElse(minimumSeverityLevel.name()));
+        allTools = Optional.ofNullable(prefs.getBoolean(PREF_ALL_TOOLS)).orElse(allTools);
+        String csv = Optional.ofNullable(prefs.getString(PREF_SELECTED_TOOLS)).orElse("");
+        if (!csv.isEmpty()) {
+            Set<String> s = new java.util.HashSet<>();
+            for (String part : csv.split(",")) {
+                String p = part.trim();
+                if (!p.isEmpty()) s.add(p);
+            }
+            selectedToolNames = java.util.Collections.unmodifiableSet(s);
+        }
     }
 
     private void savePrefs() {
@@ -126,6 +141,12 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
         prefs.setString(PREF_MCP_SERVER_URL, mcpServerUrl);
         prefs.setString(PREF_MIN_CONF, minimumConfidenceLevel.name());
         prefs.setString(PREF_MIN_SEV, minimumSeverityLevel.name());
+        prefs.setBoolean(PREF_ALL_TOOLS, allTools);
+        if (selectedToolNames != null && !selectedToolNames.isEmpty()) {
+            prefs.setString(PREF_SELECTED_TOOLS, String.join(",", selectedToolNames));
+        } else {
+            prefs.setString(PREF_SELECTED_TOOLS, "");
+        }
     }
 
     boolean isOnlyInScope() {
@@ -161,6 +182,25 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
 
     void setMinimumSeverityLevel(AuditIssueSeverity v) {
         minimumSeverityLevel = v;
+        savePrefs();
+    }
+
+    boolean isAllTools() {
+        return allTools;
+    }
+
+    void setAllTools(boolean all) {
+        this.allTools = all;
+        savePrefs();
+    }
+
+    Set<String> getSelectedToolNames() {
+        return selectedToolNames;
+    }
+
+    void setSelectedToolNames(Set<String> names) {
+        if (names == null) names = java.util.Collections.emptySet();
+        this.selectedToolNames = java.util.Collections.unmodifiableSet(new java.util.HashSet<>(names));
         savePrefs();
     }
 
@@ -293,6 +333,22 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
     public ResponseReceivedAction handleHttpResponseReceived(HttpResponseReceived httpResponseReceived) {
         if (onlyInScope && !httpResponseReceived.initiatingRequest().isInScope()) {
             return ResponseReceivedAction.continueWith(httpResponseReceived);
+        }
+
+        // Tool source filtering
+        if (!allTools) {
+            ToolType source = null;
+            if (httpResponseReceived.toolSource() != null) {
+                try {
+                    source = httpResponseReceived.toolSource().toolType();
+                } catch (Throwable t) {
+                    // Fallback in case of API differences; leave source as null
+                }
+            }
+            String name = source != null ? source.name() : "";
+            if (!selectedToolNames.contains(name)) {
+                return ResponseReceivedAction.continueWith(httpResponseReceived);
+            }
         }
 
         HttpRequest req = httpResponseReceived.initiatingRequest();
