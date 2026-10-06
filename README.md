@@ -13,6 +13,10 @@ ShyHurricane Forwarder is a Burp Suite extension that forwards HTTP traffic and 
 
 ## How to use it
 
+Building and running tests requires JDK 17 or newer. Set `JAVA_HOME` to that JDK
+before running Gradle.
+Run the tests with `./gradlew test`.
+
 1. Download JAR file from https://github.com/double16/shyhurricane-burpsuite/releases OR
     ```shell
     git clone https://github.com/double16/shyhurricane-burpsuite.git
