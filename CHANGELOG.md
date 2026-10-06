@@ -1,6 +1,11 @@
 ShyHurricane-BurpSuite Changelog
 ================================
 
+Unreleased
+----------
+
+- Update the Gradle wrapper to 9.8.0.
+
 1.1.0
 -----
 
