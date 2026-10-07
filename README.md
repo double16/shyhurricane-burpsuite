@@ -8,6 +8,7 @@ ShyHurricane Forwarder is a Burp Suite extension that forwards HTTP traffic and 
 - only-in-scope toggle
 - minimum issue severity/confidence
 - tool-source filtering
+- HTTP status filtering: 2xx (default), 3xx, 4xx, and 5xx; 1xx is always excluded
 
 - Skips non-textual/binary content by inspecting `Content-Type` (e.g., audio/video/font/binary, most images except SVG, `application/octet-stream`, `pdf`, `zip`, `x-protobuf`, etc.).
 
@@ -33,6 +34,7 @@ Run the tests with `./gradlew test`.
    - Only in scope: enable to forward only in scope traffic or issues for an in-scope request.
    - Minimum Severity and Confidence
    - Tool sources: either keep “All tools” enabled or uncheck it and select specific tools that should be forwarded.
+   - Status codes: select the classes to forward, or click “Select all statuses” to check 2xx–5xx. Only 2xx is selected by default; 1xx is never forwarded. Selecting no classes disables HTTP traffic forwarding. These settings persist and do not affect scanner findings.
    - Save/apply your settings.
 4. Generate data
    - Use Burp Proxy/Repeater/Scanner as usual. The extension will:

@@ -19,6 +19,7 @@ class ShyHurricaneConfigTab extends JPanel {
     private final JComboBox<AuditIssueSeverity> severityBox;
     private final JCheckBox allToolsCheck;
     private final java.util.Map<ToolType, JCheckBox> toolChecks = new java.util.EnumMap<>(ToolType.class);
+    private final java.util.Map<Integer, JCheckBox> statusChecks = new java.util.LinkedHashMap<>();
 
     ShyHurricaneConfigTab(ExtensionShyHurricaneForwarder ext, MontoyaApi api) {
         super(new GridBagLayout());
@@ -104,6 +105,25 @@ class ShyHurricaneConfigTab extends JPanel {
         c.gridx = 0;
         c.gridwidth = 2;
         c.gridy = 5;
+        c.gridwidth = 1;
+        c.anchor = GridBagConstraints.WEST;
+        add(new JLabel("Status codes to capture:"), c);
+        JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        for (int statusClass = 2; statusClass <= 5; statusClass++) {
+            JCheckBox check = new JCheckBox(statusClass + "xx",
+                    ext.getSelectedStatusClasses().contains(statusClass));
+            statusChecks.put(statusClass, check);
+            statusPanel.add(check);
+        }
+        JButton selectAllStatuses = new JButton("Select all statuses");
+        selectAllStatuses.addActionListener(e -> statusChecks.values().forEach(check -> check.setSelected(true)));
+        statusPanel.add(selectAllStatuses);
+        c.gridx = 1;
+        add(statusPanel, c);
+
+        c.gridx = 0;
+        c.gridwidth = 2;
+        c.gridy = 6;
         c.anchor = GridBagConstraints.EAST;
         add(saveBtn, c);
     }
@@ -135,6 +155,11 @@ class ShyHurricaneConfigTab extends JPanel {
             }
         }
         ext.setSelectedToolNames(selected);
+        java.util.Set<Integer> selectedStatuses = new java.util.HashSet<>();
+        statusChecks.forEach((statusClass, check) -> {
+            if (check.isSelected()) selectedStatuses.add(statusClass);
+        });
+        ext.setSelectedStatusClasses(selectedStatuses);
         JOptionPane.showMessageDialog(this, "Configuration saved.", "ShyHurricane", JOptionPane.INFORMATION_MESSAGE);
     }
 }

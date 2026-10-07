@@ -12,6 +12,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -160,6 +162,53 @@ class ExtensionShyHurricaneForwarderToolFilterTest {
         }
 
         assertEquals(0, server.requestCount, "No POST should be made when tool is not selected");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 99, 100, 101, 199, 200, 204, 299, 300, 399, 400, 499, 500, 599, 600})
+    void defaultStatusFilter(int status) {
+        receiveStatus(status);
+        assertEquals(status >= 200 && status <= 299 ? 1 : 0, server.requestCount);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 100, 101, 199, 200, 299, 300, 399, 400, 499, 500, 599, 600})
+    void allStatusesStillExcludeInformationalAndInvalidCodes(int status) {
+        ext.setSelectedStatusClasses(java.util.Set.of(2, 3, 4, 5));
+        receiveStatus(status);
+        assertEquals(status >= 200 && status <= 599 ? 1 : 0, server.requestCount);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {2, 3, 4, 5})
+    void individualStatusClasses(int selectedClass) {
+        ext.setSelectedStatusClasses(java.util.Set.of(selectedClass));
+        for (int statusClass = 2; statusClass <= 5; statusClass++) {
+            int before = server.requestCount;
+            receiveStatus(statusClass * 100);
+            assertEquals(statusClass == selectedClass ? 1 : 0, server.requestCount - before);
+        }
+    }
+
+    @Test
+    void combinedAndEmptyStatusSelections() {
+        ext.setSelectedStatusClasses(java.util.Set.of(3, 5));
+        for (int status : new int[]{200, 300, 400, 500}) receiveStatus(status);
+        assertEquals(2, server.requestCount);
+        ext.setSelectedStatusClasses(java.util.Set.of());
+        for (int status : new int[]{200, 300, 400, 500}) receiveStatus(status);
+        assertEquals(2, server.requestCount);
+    }
+
+    private void receiveStatus(int status) {
+        try {
+            ext.handleHttpResponseReceived(responseProxy(null, "text/html", status, "ok", reqProxy(true)));
+        } catch (NullPointerException expected) {
+            // Montoya's continueWith factory is unavailable outside Burp.
+            assertTrue(java.util.Arrays.stream(expected.getStackTrace())
+                    .anyMatch(frame -> frame.getClassName().equals(
+                            "burp.api.montoya.http.handler.ResponseReceivedAction")));
+        }
     }
 
     @Test
