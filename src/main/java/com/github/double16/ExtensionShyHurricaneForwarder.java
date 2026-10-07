@@ -74,6 +74,7 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
     private static final String PREF_MIN_SEV = "minSeverity";
     private static final String PREF_ALL_TOOLS = "allTools";
     private static final String PREF_SELECTED_TOOLS = "selectedToolsCsv";
+    private static final String PREF_SELECTED_STATUS_CLASSES = "selectedStatusClassesCsv";
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -85,6 +86,7 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
     private volatile AuditIssueSeverity minimumSeverityLevel = AuditIssueSeverity.INFORMATION;
     private volatile boolean allTools = true; // default to all tools
     private volatile Set<String> selectedToolNames = Set.of(); // store ToolType names
+    private volatile Set<Integer> selectedStatusClasses = Set.of(2);
 
     private Preferences prefs;
 
@@ -121,6 +123,17 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
         minimumSeverityLevel = AuditIssueSeverity.valueOf(Optional.ofNullable(
                 prefs.getString(PREF_MIN_SEV)).orElse(minimumSeverityLevel.name()));
         allTools = Optional.ofNullable(prefs.getBoolean(PREF_ALL_TOOLS)).orElse(allTools);
+        String statusCsv = prefs.getString(PREF_SELECTED_STATUS_CLASSES);
+        if (statusCsv != null) {
+            Set<Integer> classes = new java.util.HashSet<>();
+            for (String part : statusCsv.split(",")) {
+                String value = part.trim();
+                if (Set.of("2", "3", "4", "5").contains(value)) {
+                    classes.add(Integer.parseInt(value));
+                }
+            }
+            selectedStatusClasses = Set.copyOf(classes);
+        }
         String csv = Optional.ofNullable(prefs.getString(PREF_SELECTED_TOOLS)).orElse("");
         if (!csv.isEmpty()) {
             Set<String> s = new java.util.HashSet<>();
@@ -142,6 +155,8 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
         prefs.setString(PREF_MIN_CONF, minimumConfidenceLevel.name());
         prefs.setString(PREF_MIN_SEV, minimumSeverityLevel.name());
         prefs.setBoolean(PREF_ALL_TOOLS, allTools);
+        prefs.setString(PREF_SELECTED_STATUS_CLASSES, selectedStatusClasses.stream()
+                .sorted().map(String::valueOf).collect(java.util.stream.Collectors.joining(",")));
         if (selectedToolNames != null && !selectedToolNames.isEmpty()) {
             prefs.setString(PREF_SELECTED_TOOLS, String.join(",", selectedToolNames));
         } else {
@@ -182,6 +197,19 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
 
     void setMinimumSeverityLevel(AuditIssueSeverity v) {
         minimumSeverityLevel = v;
+        savePrefs();
+    }
+
+    Set<Integer> getSelectedStatusClasses() {
+        return selectedStatusClasses;
+    }
+
+    void setSelectedStatusClasses(Set<Integer> classes) {
+        Set<Integer> selected = classes == null ? Set.of() : Set.copyOf(classes);
+        if (!Set.of(2, 3, 4, 5).containsAll(selected)) {
+            throw new IllegalArgumentException("Status classes must be between 2 and 5");
+        }
+        selectedStatusClasses = selected;
         savePrefs();
     }
 
@@ -331,6 +359,11 @@ public class ExtensionShyHurricaneForwarder implements BurpExtension, ExtensionU
 
     @Override
     public ResponseReceivedAction handleHttpResponseReceived(HttpResponseReceived httpResponseReceived) {
+        int statusCode = httpResponseReceived.statusCode();
+        if (statusCode < 200 || statusCode >= 600 || !selectedStatusClasses.contains(statusCode / 100)) {
+            return ResponseReceivedAction.continueWith(httpResponseReceived);
+        }
+
         if (onlyInScope && !httpResponseReceived.initiatingRequest().isInScope()) {
             return ResponseReceivedAction.continueWith(httpResponseReceived);
         }

@@ -1,10 +1,11 @@
 ShyHurricane-BurpSuite Changelog
 ================================
 
-Unreleased
-----------
+1.2.0
+-----
 
-- Update the Gradle wrapper to 9.8.0.
+- Add ability to filter by status codes.
+- Update the Gradle to 9.8.0 and other dependency upgrades.
 
 1.1.0
 -----
