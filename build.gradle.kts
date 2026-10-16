@@ -1,8 +1,8 @@
 plugins {
     id("java")
     id("com.gradleup.shadow") version "9.6.1"
-    id("com.diffplug.spotless") version "8.10.3"
-    id("io.github.ben-manes.versions") version "0.65.0"
+    id("com.diffplug.spotless") version "8.10.4"
+    id("io.github.ben-manes.versions") version "0.66.0"
 }
 
 java {
