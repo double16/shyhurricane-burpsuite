@@ -1,6 +1,14 @@
 ShyHurricane-BurpSuite Changelog
 ================================
 
+1.3.0
+----------
+
+## Features
+
+- Add **Send** to ShyHurricane's issue and HTTP message context menus, supporting
+  multiple selections and bypassing all automatic forwarding filters.
+
 1.2.0
 -----
 

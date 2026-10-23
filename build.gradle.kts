@@ -1,5 +1,6 @@
 plugins {
     id("java")
+    jacoco
     id("com.gradleup.shadow") version "9.6.1"
     id("com.diffplug.spotless") version "8.10.4"
     id("io.github.ben-manes.versions") version "0.66.0"
@@ -25,6 +26,43 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    systemProperty("java.awt.headless", "true")
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+spotless {
+    java {
+        googleJavaFormat()
+    }
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+}
+
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.test)
+    violationRules {
+        rule {
+            element = "SOURCEFILE"
+            limit {
+                counter = "LINE"
+                minimum = "0.80".toBigDecimal()
+            }
+            limit {
+                counter = "BRANCH"
+                minimum = "0.80".toBigDecimal()
+            }
+        }
+    }
+}
+
+tasks.check {
+    dependsOn(tasks.jacocoTestCoverageVerification)
 }
 
 tasks.shadowJar {
