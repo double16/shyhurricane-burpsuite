@@ -83,6 +83,56 @@ class ForwarderLifecycleTest {
     assertTrue(dropped.await(5, TimeUnit.SECONDS));
   }
 
+  @Test
+  void automaticQueueIsNonblockingDropsOldestAndStopsOnUnload() throws Exception {
+    final CountDownLatch started = new CountDownLatch(1);
+    final CountDownLatch interrupted = new CountDownLatch(1);
+    final AtomicInteger delivered = new AtomicInteger();
+    final var forwarder =
+        new ExtensionShyHurricaneForwarder() {
+          @Override
+          void sendIssue(burp.api.montoya.scanner.audit.issues.AuditIssue issue) throws Exception {
+            delivered.incrementAndGet();
+            started.countDown();
+            try {
+              new CountDownLatch(1).await();
+            } catch (InterruptedException e) {
+              interrupted.countDown();
+              throw e;
+            }
+          }
+        };
+    final Map<String, Object> preferences = new HashMap<>();
+    preferences.put("onlyInScope", false);
+    final CountDownLatch dropped = new CountDownLatch(1);
+    final var api =
+        (MontoyaApi)
+            apiStub(
+                MontoyaApi.class,
+                preferences,
+                new AtomicReference<>(),
+                new AtomicInteger(),
+                new AtomicInteger(),
+                dropped);
+    SwingUtilities.invokeAndWait(() -> forwarder.initialize(api));
+    try {
+      final var issue = issue(java.util.List.of(), "", "");
+      forwarder.setMinimumConfidenceLevel(AuditIssueConfidence.TENTATIVE);
+      // The callback must return even though the delivery worker stays blocked.
+      forwarder.handleNewAuditIssue(issue);
+      assertTrue(started.await(5, TimeUnit.SECONDS));
+      for (int i = 0; i < 257; i++) forwarder.handleNewAuditIssue(issue);
+      assertTrue(dropped.await(5, TimeUnit.SECONDS));
+      assertEquals(1, delivered.get());
+      forwarder.extensionUnloaded();
+      assertTrue(interrupted.await(5, TimeUnit.SECONDS));
+      forwarder.handleNewAuditIssue(issue);
+      assertEquals(1, delivered.get());
+    } finally {
+      forwarder.extensionUnloaded();
+    }
+  }
+
   private Object apiStub(
       Class<?> type,
       Map<String, Object> preferences,
@@ -120,7 +170,9 @@ class ForwarderLifecycleTest {
               return null;
             }
             case "logToOutput" -> {
-              assertTrue(((String) args[0]).contains("1 dropped"));
+              assertTrue(
+                  ((String) args[0]).contains("1 dropped")
+                      || ((String) args[0]).contains("1 failed"));
               dropped.countDown();
               return null;
             }

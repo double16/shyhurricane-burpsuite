@@ -82,6 +82,15 @@ public class ExtensionShyHurricaneForwarder
 
   private Preferences prefs;
   private ManualSendQueue manualSends;
+  private ManualSendQueue automaticFindings;
+  private final Set<HttpURLConnection> findingConnections =
+      java.util.concurrent.ConcurrentHashMap.newKeySet();
+  private volatile boolean unloaded;
+  private final Object findingLifecycle = new Object();
+
+  void retryDelay(long millis) throws InterruptedException {
+    Thread.sleep(millis);
+  }
 
   @Override
   public void initialize(MontoyaApi api) {
@@ -92,6 +101,7 @@ public class ExtensionShyHurricaneForwarder
     loadPrefs();
 
     registrations.add(api.http().registerHttpHandler(this));
+    automaticFindings = new ManualSendQueue(api.logging()::logToOutput);
     registrations.add(api.scanner().registerAuditIssueHandler(this));
     manualSends = new ManualSendQueue(api.logging()::logToOutput);
     registrations.add(
@@ -103,6 +113,12 @@ public class ExtensionShyHurricaneForwarder
 
   @Override
   public void extensionUnloaded() {
+    synchronized (findingLifecycle) {
+      unloaded = true;
+      findingConnections.forEach(HttpURLConnection::disconnect);
+      findingConnections.clear();
+    }
+    if (automaticFindings != null) automaticFindings.close();
     if (manualSends != null) {
       manualSends.close();
     }
@@ -242,16 +258,19 @@ public class ExtensionShyHurricaneForwarder
 
   @Override
   public void handleNewAuditIssue(AuditIssue auditIssue) {
-    if (auditIssue.confidence().compareTo(minimumConfidenceLevel) > 0) {
+    if (auditIssue.confidence() != null
+        && auditIssue.confidence().compareTo(minimumConfidenceLevel) > 0) {
       return;
     }
-    if (auditIssue.severity().compareTo(minimumSeverityLevel) > 0) {
+    if (auditIssue.severity() != null
+        && auditIssue.severity().compareTo(minimumSeverityLevel) > 0) {
       return;
     }
 
     if (onlyInScope) {
       boolean anyInScope = false;
-      for (HttpRequestResponse rr : auditIssue.requestResponses()) {
+      for (HttpRequestResponse rr : evidence(auditIssue)) {
+        if (rr == null || rr.request() == null) continue;
         if (rr.request().isInScope()) {
           anyInScope = true;
           break;
@@ -263,7 +282,16 @@ public class ExtensionShyHurricaneForwarder
     }
 
     try {
-      sendIssue(auditIssue);
+      if (automaticFindings == null) {
+        sendIssue(auditIssue);
+      } else {
+        automaticFindings.submit(
+            automaticFindings.batch(1),
+            () -> {
+              sendIssue(auditIssue);
+              return true;
+            });
+      }
     } catch (Exception e) {
       System.err.println(
           "[ShyHurricaneForwarder] Error posting finding ("
@@ -286,15 +314,16 @@ public class ExtensionShyHurricaneForwarder
 
                     %s
                     """,
-            auditIssue.severity().name(),
-            auditIssue.confidence().name(),
+            label(auditIssue.severity()),
+            label(auditIssue.confidence()),
             auditIssue.baseUrl(),
-            auditIssue.definition().background()));
+            (auditIssue.definition() == null ? "" : auditIssue.definition().background())));
     if (StringUtils.isNotBlank(auditIssue.detail())) {
       markdown.append(auditIssue.detail()).append("\n");
     }
     markdown.append("\n**Reproduction Steps**\n");
-    for (HttpRequestResponse rr : auditIssue.requestResponses()) {
+    for (HttpRequestResponse rr : evidence(auditIssue)) {
+      if (rr == null || rr.request() == null) continue;
       markdown.append(rr.request().method());
       markdown.append(" ");
       markdown.append(rr.request().url());
@@ -321,18 +350,102 @@ public class ExtensionShyHurricaneForwarder
     if (StringUtils.isNotBlank(auditIssue.remediation())) {
       markdown.append("\n").append(auditIssue.remediation()).append("\n");
     }
-    if (StringUtils.isNotBlank(auditIssue.definition().remediation())) {
+    if (auditIssue.definition() != null
+        && StringUtils.isNotBlank(auditIssue.definition().remediation())) {
       markdown.append("\n").append(auditIssue.definition().remediation()).append("\n");
     }
-    postFinding(auditIssue.baseUrl(), title, markdown.toString());
+    Exception failure = null;
+    boolean found = false;
+    for (HttpRequestResponse rr : evidence(auditIssue)) {
+      if (rr == null || rr.request() == null || StringUtils.isBlank(rr.request().url())) continue;
+      found = true;
+      try {
+        postFinding(
+            rr.request().url(),
+            title,
+            markdown.toString(),
+            metadata(auditIssue, rr.request().method()));
+      } catch (InterruptedException e) {
+        throw e;
+      } catch (Exception e) {
+        if (failure == null) failure = e;
+      }
+    }
+    if (!found)
+      postFinding(auditIssue.baseUrl(), title, markdown.toString(), metadata(auditIssue, null));
+    if (failure != null) throw failure;
   }
 
-  private void postFinding(String target, String title, String markdown) throws Exception {
+  private void postFinding(
+      String target, String title, String markdown, Map<String, Object> metadata) throws Exception {
     Map<String, Object> data = new HashMap<>();
     data.put("target", target);
     data.put("title", title);
     data.put("markdown", markdown);
-    postData(mcpServerUrl + FINDINGS_PATH, data);
+    data.put("metadata", metadata);
+    final String destination = mcpServerUrl + FINDINGS_PATH;
+    final String serialized = MAPPER.writeValueAsString(data);
+    for (int attempt = 0; ; attempt++) {
+      if (unloaded || Thread.currentThread().isInterrupted()) throw new InterruptedException();
+      try {
+        postSerialized(destination, serialized, true);
+        return;
+      } catch (IOException e) {
+        if (attempt == 2 || !retryable(e)) throw e;
+        retryDelay(
+            (1000L << attempt) + java.util.concurrent.ThreadLocalRandom.current().nextInt(251));
+      }
+    }
+  }
+
+  static boolean retryable(IOException e) {
+    if (e instanceof PostFailureException p)
+      return p.statusCode() == 408
+          || p.statusCode() == 429
+          || (p.statusCode() >= 500 && p.statusCode() <= 599);
+    return !(e instanceof javax.net.ssl.SSLException
+        || e instanceof java.net.MalformedURLException
+        || e instanceof java.net.ProtocolException);
+  }
+
+  private static List<HttpRequestResponse> evidence(AuditIssue issue) {
+    return issue.requestResponses() == null ? List.of() : issue.requestResponses();
+  }
+
+  private static String label(Enum<?> value) {
+    return value == null ? null : value.name();
+  }
+
+  static String normalize(String label, boolean confidence) {
+    return switch (label.toUpperCase(java.util.Locale.ROOT)) {
+      case "HIGH" -> confidence ? "unknown" : "high";
+      case "MEDIUM" -> confidence ? "unknown" : "medium";
+      case "LOW" -> confidence ? "unknown" : "low";
+      case "INFORMATION", "INFORMATIONAL" -> confidence ? "unknown" : "informational";
+      case "CERTAIN" -> confidence ? "high" : "unknown";
+      case "FIRM" -> confidence ? "medium" : "unknown";
+      case "TENTATIVE" -> confidence ? "low" : "unknown";
+      default -> "unknown";
+    };
+  }
+
+  static Map<String, Object> metadata(AuditIssue issue, String method) {
+    final Map<String, Object> result = new HashMap<>();
+    result.put("source", "burp");
+    result.put("verification_status", "unverified");
+    if (issue.definition() != null)
+      result.put("rule_id", Integer.toString(issue.definition().typeIndex()));
+    if (issue.severity() != null) {
+      result.put("native_severity", issue.severity().name());
+      result.put("severity", normalize(issue.severity().name(), false));
+    }
+    if (issue.confidence() != null) {
+      result.put("native_confidence", issue.confidence().name());
+      result.put("confidence", normalize(issue.confidence().name(), true));
+    }
+    if (StringUtils.isNotBlank(method))
+      result.put("affected_method", method.toUpperCase(java.util.Locale.ROOT));
+    return Map.copyOf(result);
   }
 
   private boolean shouldSkip(String contentType) {
@@ -459,11 +572,19 @@ public class ExtensionShyHurricaneForwarder
   }
 
   private void postData(String urlStr, Map<String, Object> data) throws Exception {
-    String jsonBody = MAPPER.writeValueAsString(data);
+    postSerialized(urlStr, MAPPER.writeValueAsString(data), false);
+  }
+
+  private void postSerialized(String urlStr, String jsonBody, boolean finding) throws Exception {
 
     URL url = new URL(urlStr);
     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
     try {
+      if (finding)
+        synchronized (findingLifecycle) {
+          if (unloaded) throw new InterruptedException();
+          findingConnections.add(conn);
+        }
       conn.setConnectTimeout(5_000);
       conn.setReadTimeout(15_000);
       conn.setInstanceFollowRedirects(false);
@@ -481,6 +602,7 @@ public class ExtensionShyHurricaneForwarder
         response.transferTo(java.io.OutputStream.nullOutputStream());
       }
     } finally {
+      findingConnections.remove(conn);
       conn.disconnect();
     }
   }
