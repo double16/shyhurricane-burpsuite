@@ -73,3 +73,22 @@ At most 256 items wait in the manual send queue; when it
 fills, the oldest pending item is dropped. Unloading discards pending sends and
 interrupts the worker. Network operations use 5-second connection and 15-second
 read timeouts.
+
+## Structured findings
+
+Findings include Burp source, rule type ID, native and normalized severity and
+confidence, unverified verification status, and the evidence request method when
+available. Each evidence request produces a record with its exact URL; issues
+without usable requests retain their base URL. Montoya does not expose structured
+affected parameters, CWE identifiers, or issue-instance IDs through this adapter.
+Those fields and source coordinates, hashes, capture IDs, and timestamps are omitted.
+
+Automatic findings use a separate background queue with 256 pending items and
+oldest-item eviction. Automatic and manual findings retry transient network errors,
+HTTP 408/429, and 5xx responses up to three attempts, with 1- and 2-second delays
+plus jitter. Other failures are not retried. Index submissions are unchanged.
+Server searchability is asynchronous; server deduplication uses target and Markdown.
+
+Unloading cancels pending findings and retry waits, disconnects active findings
+connections, and prevents new finding attempts. A failed record does not prevent
+remaining evidence records from being submitted.

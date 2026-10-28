@@ -1,6 +1,19 @@
 ShyHurricane-BurpSuite Changelog
 ================================
 
+1.4.0
+----------
+
+## Features
+
+- Add structured finding metadata, per-request finding targets, background automatic
+  finding delivery, and bounded transient retries for findings submissions.
+
+## Fixes
+
+- Cancel active findings connections on unload and preserve identical payloads
+  across transient retries.
+
 1.3.0
 ----------
 
