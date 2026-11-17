@@ -2,8 +2,8 @@ plugins {
     id("java")
     jacoco
     id("com.gradleup.shadow") version "9.6.1"
-    id("com.diffplug.spotless") version "8.10.4"
-    id("io.github.ben-manes.versions") version "0.66.0"
+    id("com.diffplug.spotless") version "8.11.0"
+    id("io.github.ben-manes.versions") version "0.67.0"
 }
 
 java {
@@ -17,7 +17,7 @@ repositories {
 
 dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.22.+")
-    implementation("org.apache.commons:commons-lang3:3.21.0")
+    implementation("org.apache.commons:commons-lang3:3.22.0")
     implementation("net.portswigger.burp.extensions:montoya-api:2026.7")
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
