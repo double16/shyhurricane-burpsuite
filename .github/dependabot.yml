@@ -3,12 +3,12 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "quarterly"
 
   - package-ecosystem: gradle
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "quarterly"
     groups:
       minor:
         applies-to: version-updates
